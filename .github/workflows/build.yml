@@ -1,0 +1,68 @@
+name: Windows Build
+
+on:
+  push:
+    paths:
+      - HyperCLIW/**
+
+jobs:
+  build_windows:
+    name: Build Project
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: microsoft/setup-msbuild@v1.0.2
+      - name: Build
+        run: |
+          msbuild HyperCLIW.sln /p:OutDir=..\Build\x86\ /p:Configuration=Release /p:Platform=x86
+          Move-Item -Force -Path 'Build\x86\HyperCLIW.exe' -Destination 'Build\x86\HyperCLIW-x86.exe'
+          msbuild HyperCLIW.sln /p:OutDir=..\Build\x64\ /p:Configuration=Release /p:Platform=x64
+          Move-Item -Force -Path 'Build\x64\HyperCLIW.exe' -Destination 'Build\x64\HyperCLIW-x64.exe'
+          Get-ChildItem -Name -Recurse -Filter *.pdb | ForEach-Object {Remove-Item -Force $_}
+          Remove-Item -Force -Recurse HyperCLIW\Release
+          Remove-Item -Force -Recurse HyperCLIW\x64
+          $hypercliw_x86_md5_text = @'
+          {
+            "schemaVersion": 1,
+            "color": "00aedb",
+            "label": "HyperCLIW-x86.exe MD5",
+            "message": "PLACEHOLDER",
+            "labelColor": "1d1d1d",
+            "style": "for-the-badge",
+            "namedLogo": "windows"
+          }
+          '@
+          New-Item -ItemType Directory -Force -Path '.\Docs\Json'
+          Write-Output "$hypercliw_x86_md5_text" > .\Docs\Json\hypercliw_x86_md5.json
+          $file = ".\Docs\Json\hypercliw_x86_md5.json"
+          $md5 = New-Object -TypeName System.Security.Cryptography.MD5CryptoServiceProvider
+          $hash = [System.BitConverter]::ToString($md5.ComputeHash([System.IO.File]::ReadAllBytes("Build/x86/HyperCLIW-x86.exe")))
+          ((Get-Content -path $file -Raw) -replace 'PLACEHOLDER',$hash) | Set-Content -Path "$file"
+          $hypercliw_x64_md5_text = @'
+          {
+            "schemaVersion": 1,
+            "color": "00aedb",
+            "label": "HyperCLIW-x64.exe MD5",
+            "message": "PLACEHOLDER",
+            "labelColor": "1d1d1d",
+            "style": "for-the-badge",
+            "namedLogo": "windows"
+          }
+          '@
+          Write-Output "$hypercliw_x64_md5_text" > .\Docs\Json\hypercliw_x64_md5.json
+          $file = ".\Docs\Json\hypercliw_x64_md5.json"
+          $md5 = New-Object -TypeName System.Security.Cryptography.MD5CryptoServiceProvider
+          $hash = [System.BitConverter]::ToString($md5.ComputeHash([System.IO.File]::ReadAllBytes("Build/x64/HyperCLIW-x64.exe")))
+          ((Get-Content -path $file -Raw) -replace 'PLACEHOLDER',$hash) | Set-Content -Path "$file"
+      - uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: Built Project
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: True
+          tag: 1.0.0.0
+          name: Stable Release
+          prerelease: False
+          artifacts: "Build/x86/HyperCLIW-x86.exe, Build/x64/HyperCLIW-x64.exe"
+          token: ${{ secrets.GITHUB_TOKEN }}
